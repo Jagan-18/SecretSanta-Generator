@@ -35,6 +35,8 @@ java -jar target/*.jar
 You can then access the application here: http://localhost:8080/
 
 ![Welcome](https://github.com/NotTheBest/secretsanta-generator/blob/master/preview-images/welcomepage.png?raw=true)
+![Welcome Page](https://github.com/Jagan-18/SecretSanta-Generator/blob/main/preview-images/welcomepage.png?raw=true)
+
 
 Or you can run it from Maven directly using the Spring Boot Maven plugin.
 
