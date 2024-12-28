@@ -99,3 +99,97 @@ pipeline {
             }
         }    
 }
+
+#----------------------------------------------------------------------------------------------------------------------#
+# Other way pipeline
+pipeline {
+    agent any
+    tools {
+        maven 'maven3'
+        jdk 'jdk17'
+    }
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+    
+    stages {
+        stage('git checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Jagan-18/SecretSanta-Generator.git'
+            }
+        }
+        stage('Compile') {
+            steps {
+                sh "mvn compile"
+            }
+        }
+        stage('Tests') {
+            steps {
+                sh "mvn test"
+            }
+        }
+        stage('Sonarqube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''
+                        $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectKey=santa \
+                        -Dsonar.projectName=santa \
+                        -Dsonar.java.binaries=target/classes
+                    '''
+                }
+            }
+        }
+        stage('OWasp Scan') {
+            steps {
+                // Run OWASP Dependency-Check scan
+                dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'DC'
+                // Publish the Dependency-Check report
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage('Build application') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        stage('Build Docker image') {
+            steps {
+                withDockerRegistry([credentialsId: 'docker', url: 'https://index.docker.io/v1/']) {
+                    script {
+                        // Build the Docker image and capture the image ID
+                        def buildResult = sh(script: "docker build -t santa1:latest .", returnStatus: true)
+                        if (buildResult != 0) {
+                            error "Docker build failed!"
+                        }
+                        // Print the list of Docker images to verify if the build was successful
+                        sh "docker images"
+                    }
+                }
+            }
+        }
+        stage('Tag & Push Docker image') {
+            steps {
+                withDockerRegistry([credentialsId: 'docker', url: 'https://index.docker.io/v1/']) {
+                    script {
+                        // Verify if the image exists before tagging
+                        def imageExists = sh(script: "docker images -q santa1:latest", returnStdout: true).trim()
+                        if (!imageExists) {
+                            error "Docker image santa1:latest not found!"
+                        }
+                        // Tag the Docker image
+                        sh "docker tag santa1:latest kubejaganreddy/santa1:latest"
+                        // Push the Docker image to the registry
+                        sh "docker push kubejaganreddy/santa1:latest"
+                    }
+                }
+            }
+        }
+        stage('Deploy Application') {
+            steps {
+                // Deploy the Docker image by running the container
+                sh "docker run -d -p 8081:8080 kubejaganreddy/santa1:latest"
+            }
+        }
+    }
+}
